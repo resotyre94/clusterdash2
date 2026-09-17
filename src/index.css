@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+@layer utilities {
+  /* Print Optimization */
+  @media print {
+    body {
+      background-color: #ffffff !important;
+      color: #0f172a !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
+    /* Hide header, controls, tabs, and alerts during printing */
+    header,
+    #btn-upload-file,
+    #btn-reset-sample,
+    #input-jobcard-search,
+    #btn-search-jobcard,
+    .no-print,
+    nav {
+      display: none !important;
+    }
+
+    #job-card-printable-content {
+      display: block !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      box-shadow: none !important;
+      border: 1px solid #cbd5e1 !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+
+    @page {
+      size: A4 portrait;
+      margin: 8mm;
+    }
+  }
+}

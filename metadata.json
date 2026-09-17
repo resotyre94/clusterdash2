@@ -1,0 +1,6 @@
+{
+  "name": "Elegancia Resources Financial Dashboard",
+  "description": "Executive financial and operations dashboard with persistent local storage, interactive analytics, data table, and job card preview & export.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
