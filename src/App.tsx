@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { FinancialRecord, JobCardRecord, FilterState, StoredFileMeta, ActiveTab, KpiSummary } from './types';
 import { SAMPLE_DATA } from './constants/logo';
 import { cleanText, normalizeMonth, num } from './services/formatters';
-import { saveUploadedData, loadSavedData, clearSavedData } from './services/storage';
+import { saveUploadedData, loadSavedData, clearSavedData, StoredPayload } from './services/storage';
+import { loadCloudDataset, saveCloudDataset } from './services/cloudStorage';
 import { parseExcelFile } from './services/excel';
 import { Header } from './components/Header';
 import { DashboardTab } from './components/DashboardTab';
@@ -39,32 +40,57 @@ export default function App() {
 
   const showToast = useCallback((text: string, type: 'success' | 'info' | 'error' = 'success') => {
     setToastMessage({ text, type });
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 3200);
+    setTimeout(() => setToastMessage(null), 3200);
   }, []);
 
-  // On mount: Load persisted data from IndexedDB (free & fast storage)
+  // The cloud is authoritative across devices; IndexedDB is a local offline cache.
   useEffect(() => {
+    let cancelled = false;
+
     async function initStorage() {
       try {
+        let cloudDataset: StoredPayload | null = null;
+        try {
+          cloudDataset = await loadCloudDataset();
+        } catch (error) {
+          console.warn('Shared dataset could not be reached; checking local cache.', error);
+        }
+
+        if (cancelled) return;
+        if (cloudDataset && cloudDataset.rawData.length + cloudDataset.jcData.length > 0) {
+          setRawData(cloudDataset.rawData);
+          setJcData(cloudDataset.jcData || []);
+          setMeta(cloudDataset.meta);
+          setFilters(INITIAL_FILTER);
+          try {
+            await saveUploadedData(cloudDataset);
+          } catch (error) {
+            console.warn('Could not refresh local dataset cache.', error);
+          }
+          showToast(`Loaded shared dataset "${cloudDataset.meta.fileName}"`, 'info');
+          return;
+        }
+
         const saved = await loadSavedData();
+        if (cancelled) return;
         if (saved && saved.rawData && saved.rawData.length > 0) {
           setRawData(saved.rawData);
           setJcData(saved.jcData || []);
           setMeta(saved.meta);
-          showToast(`Remembered file "${saved.meta.fileName}" from storage`, 'info');
+          showToast(`Loaded local cached file "${saved.meta.fileName}"`, 'info');
         }
-      } catch (err) {
-        console.error('Failed loading saved dataset', err);
+      } catch (error) {
+        console.error('Failed loading saved dataset', error);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     }
-    initStorage();
+
+    void initStorage();
+    return () => { cancelled = true; };
   }, [showToast]);
 
-  // Handle new file upload: parse & immediately persist in IndexedDB
+  // A replacement becomes active only after it has been published centrally.
   const handleFileUpload = async (file: File) => {
     setIsLoading(true);
     try {
@@ -81,29 +107,24 @@ export default function App() {
         jcRows: parsedJc.length,
         isSample: false
       };
+      const payload: StoredPayload = { meta: newMeta, rawData: parsedRaw, jcData: parsedJc };
 
+      await saveCloudDataset(payload);
+      await saveUploadedData(payload);
       setRawData(parsedRaw);
       setJcData(parsedJc);
       setMeta(newMeta);
       setFilters(INITIAL_FILTER);
-
-      // Persist free and fast in browser storage
-      await saveUploadedData({
-        meta: newMeta,
-        rawData: parsedRaw,
-        jcData: parsedJc
-      });
-
-      showToast(`Loaded "${file.name}" with ${parsedRaw.length} rows & saved to storage.`);
-    } catch (err) {
-      console.error('File parsing error', err);
-      showToast(err instanceof Error ? err.message : 'Error reading Excel file.', 'error');
+      showToast(`Published "${file.name}" to shared storage (${parsedRaw.length.toLocaleString()} dashboard rows).`);
+    } catch (error) {
+      console.error('File upload failed:', error);
+      showToast(error instanceof Error ? error.message : 'Could not upload the Excel file.', 'error');
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Revert to sample dataset and clear saved file
+  // Reset Sample is local to this browser. The shared dataset remains published until another upload.
   const handleResetSample = async () => {
     setIsLoading(true);
     try {
@@ -112,9 +133,9 @@ export default function App() {
       setJcData([]);
       setMeta(DEFAULT_META);
       setFilters(INITIAL_FILTER);
-      showToast('Reverted to Sample Dataset and cleared local storage.', 'info');
-    } catch (err) {
-      console.error(err);
+      showToast('Showing the sample dataset on this device. The shared dataset remains available to other devices.', 'info');
+    } catch (error) {
+      console.error(error);
     } finally {
       setIsLoading(false);
     }
@@ -124,7 +145,6 @@ export default function App() {
     setFilters((prev) => ({ ...prev, [key]: val }));
   };
 
-  // Filtered dataset for Dashboard & Table
   const filteredData = useMemo(() => {
     const y = filters.year;
     const m = filters.month;
@@ -144,39 +164,27 @@ export default function App() {
     });
   }, [rawData, filters]);
 
-  // Overall KPIs
   const kpis = useMemo<KpiSummary>(() => {
     const rev = filteredData.reduce((a, d) => a + num(d.Revenue), 0);
     const cost = filteredData.reduce((a, d) => a + num(d.Cost), 0);
     const profit = filteredData.reduce((a, d) => a + num(d.Profit), 0);
     const margin = rev > 0 ? (profit / rev) * 100 : 0;
     const activeUnits = new Set(filteredData.map((d) => cleanText(d['Business Units'])).filter(Boolean)).size;
-
-    return {
-      revenue: rev,
-      cost,
-      profit,
-      margin,
-      activeUnits
-    };
+    return { revenue: rev, cost, profit, margin, activeUnits };
   }, [filteredData]);
 
-  // Drag and drop file upload onto window
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files?.[0];
-    if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.name.endsWith('.xlsm') || file.name.endsWith('.csv'))) {
-      handleFileUpload(file);
-    }
+  const handleDrop = (event: React.DragEvent) => {
+    event.preventDefault();
+    const file = event.dataTransfer.files?.[0];
+    if (file && /\.(xlsx|xls|xlsm|csv)$/i.test(file.name)) void handleFileUpload(file);
   };
 
   return (
     <div
-      onDragOver={(e) => e.preventDefault()}
+      onDragOver={(event) => event.preventDefault()}
       onDrop={handleDrop}
       className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-sky-500 selection:text-white"
     >
-      {/* Top Navigation & App Header */}
       <Header
         meta={meta}
         activeTab={activeTab}
@@ -186,40 +194,20 @@ export default function App() {
         isLoading={isLoading}
       />
 
-      {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 pb-12">
         {activeTab === 'dashboard' && (
-          <DashboardTab
-            rawData={rawData}
-            filteredData={filteredData}
-            filters={filters}
-            onFilterChange={handleFilterChange}
-            kpis={kpis}
-          />
+          <DashboardTab rawData={rawData} filteredData={filteredData} filters={filters} onFilterChange={handleFilterChange} kpis={kpis} />
         )}
-
-        {activeTab === 'table' && (
-          <DataTableTab filteredData={filteredData} />
-        )}
-
+        {activeTab === 'table' && <DataTableTab filteredData={filteredData} />}
         {activeTab === 'jobcard' && (
-          <JobCardTab
-            jcData={jcData}
-            jcSheetName={meta?.jcSheetName}
-            sheetNames={meta?.sheetNames}
-          />
+          <JobCardTab jcData={jcData} jcSheetName={meta?.jcSheetName} sheetNames={meta?.sheetNames} />
         )}
       </main>
 
-      {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-5 right-5 z-50 animate-fade-in shadow-2xl">
           <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-xs font-semibold">
-            {toastMessage.type === 'error' ? (
-              <AlertCircle className="w-4 h-4 text-rose-400" />
-            ) : (
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            )}
+            {toastMessage.type === 'error' ? <AlertCircle className="w-4 h-4 text-rose-400" /> : <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
             <span>{toastMessage.text}</span>
           </div>
         </div>

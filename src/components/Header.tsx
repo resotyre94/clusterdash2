@@ -21,20 +21,15 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      onFileUpload(file);
-    }
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) onFileUpload(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   return (
     <header className="border-b border-slate-700/80 bg-slate-900/90 backdrop-blur sticky top-0 z-30 pb-3 pt-3 px-4 sm:px-6 mb-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        {/* Title and dataset status */}
         <div id="header-branding">
           <div className="flex items-center gap-3">
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white flex items-center gap-2.5">
@@ -47,7 +42,7 @@ export const Header: React.FC<HeaderProps> = ({
             {!meta.isSample && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-950/80 text-emerald-400 border border-emerald-800/80">
                 <Database className="w-3 h-3" />
-                Auto-saved
+                Shared Cloud Data
               </span>
             )}
           </div>
@@ -62,24 +57,23 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="text-slate-500">•</span>
                 <span>JCData: <strong className="text-white">{meta.jcRows.toLocaleString()}</strong> rows</span>
                 <span className="text-slate-500">•</span>
-                <span className="text-emerald-400 font-medium">Persisted in storage until next upload</span>
+                <span className="text-emerald-400 font-medium">Shared until the next upload</span>
               </>
             )}
           </p>
         </div>
 
-        {/* Actions: Upload & Reset */}
         <div className="flex items-center gap-2.5 flex-wrap">
           {!meta.isSample && (
             <button
               id="btn-reset-sample"
               onClick={onResetSample}
               disabled={isLoading}
-              title="Revert back to default sample dataset and clear saved file"
+              title="Show the sample dataset on this device only; do not remove the shared dataset"
               className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-750 hover:text-white transition-colors cursor-pointer disabled:opacity-50"
             >
               <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
-              Reset Sample
+              Reset Sample (This Device)
             </button>
           )}
 
@@ -104,42 +98,27 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Navigation Tabs */}
       <div className="flex items-center gap-2 mt-4 pt-2 border-t border-slate-800 overflow-x-auto">
         <button
           id="tab-btn-dashboard"
           onClick={() => onTabChange('dashboard')}
-          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold whitespace-nowrap transition-all cursor-pointer ${
-            activeTab === 'dashboard'
-              ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/20'
-              : 'bg-slate-800/80 text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold whitespace-nowrap transition-all cursor-pointer ${activeTab === 'dashboard' ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/20' : 'bg-slate-800/80 text-slate-400 hover:text-white hover:bg-slate-800'}`}
         >
           <BarChart3 className="w-4 h-4" />
           Visual Dashboard
         </button>
-
         <button
           id="tab-btn-table"
           onClick={() => onTabChange('table')}
-          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold whitespace-nowrap transition-all cursor-pointer ${
-            activeTab === 'table'
-              ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/20'
-              : 'bg-slate-800/80 text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold whitespace-nowrap transition-all cursor-pointer ${activeTab === 'table' ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/20' : 'bg-slate-800/80 text-slate-400 hover:text-white hover:bg-slate-800'}`}
         >
           <Table className="w-4 h-4" />
           Data Table
         </button>
-
         <button
           id="tab-btn-jobcard"
           onClick={() => onTabChange('jobcard')}
-          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold whitespace-nowrap transition-all cursor-pointer ${
-            activeTab === 'jobcard'
-              ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/20'
-              : 'bg-slate-800/80 text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs sm:text-sm font-bold whitespace-nowrap transition-all cursor-pointer ${activeTab === 'jobcard' ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-500/20' : 'bg-slate-800/80 text-slate-400 hover:text-white hover:bg-slate-800'}`}
         >
           <ReceiptText className="w-4 h-4" />
           Job Card
